@@ -1,2 +1,0 @@
-server.port: 5005
-spring.application.name: notification-service
