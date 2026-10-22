@@ -1,0 +1,4 @@
+server.port: 5004
+spring.application.name: reporting-service
+product-service.url: http://localhost:5001
+order-service.url: http://localhost:5002
