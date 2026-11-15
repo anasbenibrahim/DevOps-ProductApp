@@ -1,4 +1,23 @@
-server.port: 5004
-spring.application.name: reporting-service
-product-service.url: http://localhost:5001
-order-service.url: http://localhost:5002
+server:
+  port: ${SERVER_PORT:5004}
+spring:
+  application:
+    name: reporting-service
+# Proprietes lues par ReportingController
+product-service:
+  url: ${PRODUCT_SERVICE_URL:http://localhost:5001}
+order-service:
+  url: ${ORDER_SERVICE_URL:http://localhost:5002}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

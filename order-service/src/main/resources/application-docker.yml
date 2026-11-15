@@ -1,0 +1,24 @@
+# ==========================================================
+# Profil "docker" : activé avec SPRING_PROFILES_ACTIVE=docker
+# Il surcharge application.yml pour utiliser PostgreSQL au lieu de H2.
+# Aucun identifiant en dur : tout vient des variables d'environnement.
+# ==========================================================
+spring:
+  datasource:
+    # Adresse de la base : "postgres" = nom du service dans docker-compose
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:orderdb}
+    # Remplace le driver H2 éventuellement défini dans application.yml
+    driver-class-name: org.postgresql.Driver
+    # Identifiants injectés par docker-compose (depuis le fichier .env)
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    # Hibernate génère du SQL compatible PostgreSQL
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Crée / met à jour les tables au démarrage sans effacer les données
+      ddl-auto: update
+  h2:
+    console:
+      # Pas de console H2 quand on tourne sur PostgreSQL
+      enabled: false

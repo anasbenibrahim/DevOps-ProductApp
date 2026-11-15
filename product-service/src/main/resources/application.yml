@@ -1,5 +1,5 @@
 server:
-  port: 5001
+  port: ${SERVER_PORT:5001}
 spring:
   application:
     name: product-service
@@ -14,3 +14,16 @@ spring:
   h2:
     console:
       enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

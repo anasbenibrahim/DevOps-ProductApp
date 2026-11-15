@@ -1,5 +1,5 @@
 server:
-  port: 5002
+  port: ${SERVER_PORT:5002}
 spring:
   application:
     name: order-service
@@ -10,5 +10,19 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+# Propriete lue par ProductClient (@Value("${product-service.url}"))
 product-service:
-  url: http://localhost:5001
+  url: ${PRODUCT_SERVICE_URL:http://localhost:5001}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -1,0 +1,203 @@
+# Nom du projet (préfixe des conteneurs, réseaux, etc.)
+name: product-app
+
+services:
+
+  # ==========================================================
+  # 0. PostgreSQL : base de données de product-service et order-service
+  # ==========================================================
+  postgres:
+    image: postgres:16-alpine                 # version légère de PostgreSQL 16
+    container_name: postgres
+    environment:
+      # Valeurs lues dans le fichier .env (jamais écrites en dur ici)
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      # Volume nommé : les données survivent à "docker compose down"
+      - postgres-data:/var/lib/postgresql/data
+      # Script exécuté au 1er démarrage (volume vide) : crée productdb et orderdb
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # ports:
+    #   - "5432:5432"   # à décommenter seulement pour se connecter depuis ton PC (DBeaver, psql...)
+    healthcheck:
+      # "healthy" seulement quand Postgres accepte les connexions TCP sur orderdb,
+      # donc après l'exécution de init.sql
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d orderdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 1. Product Service : gère les produits (base H2)
+  # ==========================================================
+  product-service:
+    build:
+      context: .                              # Docker voit TOUT le projet (racine)
+      dockerfile: product-service/Dockerfile  # ...mais utilise le Dockerfile de ce service
+    container_name: product-service           # nom fixe du conteneur (pratique pour les logs)
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker         # active application-docker.yml (PostgreSQL)
+      - DB_NAME=productdb                     # base dédiée à product-service
+      - DB_USERNAME=${POSTGRES_USER}          # identifiants lus dans .env
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy            # attendre que la base soit prête
+    healthcheck:                              # comment Docker sait si le service est "en bonne santé"
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5001/actuator/health || exit 1"]
+      interval: 10s                           # vérifier toutes les 10 secondes
+      timeout: 5s                             # si pas de réponse en 5s → échec
+      retries: 10                             # après 10 échecs → "unhealthy"
+      start_period: 30s                       # laisser 30s à Spring Boot pour démarrer
+    networks:
+      - microservices-net                     # réseau privé partagé par nos services
+
+  # ==========================================================
+  # 2. Order Service : gère les commandes, appelle product-service
+  # ==========================================================
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: order-service
+    environment:
+      # "product-service" = nom du service ci-dessus → Docker le transforme en adresse
+      # (localhost ne marcherait pas : dans un conteneur, localhost = le conteneur lui-même)
+      - PRODUCT_SERVICE_URL=http://product-service:5001
+      - SPRING_PROFILES_ACTIVE=docker         # active application-docker.yml (PostgreSQL)
+      - DB_NAME=orderdb                       # base dédiée à order-service
+      - DB_USERNAME=${POSTGRES_USER}          # identifiants lus dans .env
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      product-service:
+        condition: service_healthy            # attendre que product-service soit "healthy"
+      postgres:
+        condition: service_healthy            # attendre que la base soit prête
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5002/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 3. User Service : gère les utilisateurs (mémoire)
+  # ==========================================================
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: user-service
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5003/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 4. Reporting Service : agrège produits + commandes
+  # ==========================================================
+  reporting-service:
+    build:
+      context: .
+      dockerfile: reporting-service/Dockerfile
+    container_name: reporting-service
+    environment:
+      - PRODUCT_SERVICE_URL=http://product-service:5001
+      - ORDER_SERVICE_URL=http://order-service:5002
+    depends_on:
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5004/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 5. Notification Service : notifications (mémoire)
+  # ==========================================================
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    ports:
+      - "5005:5005"     # "port_PC:port_conteneur" → accessible depuis ton PC
+                        # (nécessaire car le gateway ne route pas ce service)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5005/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 6. API Gateway : LE point d'entrée unique
+  # ==========================================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "5000:5000"     # seul port "métier" ouvert vers l'extérieur
+    environment:
+      - PRODUCT_SERVICE_URL=http://product-service:5001
+      - ORDER_SERVICE_URL=http://order-service:5002
+      - USER_SERVICE_URL=http://user-service:5003
+      - REPORTING_SERVICE_URL=http://reporting-service:5004
+    depends_on:
+      product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      reporting-service:
+        condition: service_healthy
+    networks:
+      - microservices-net
+
+  # ==========================================================
+  # 7. Discovery Service (Eureka) : optionnel pour l'instant
+  # ==========================================================
+  discovery-service:
+    build:
+      context: .
+      dockerfile: discovery-service/Dockerfile
+    container_name: discovery-service
+    ports:
+      - "8761:8761"     # pour voir le tableau de bord Eureka sur http://localhost:8761
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - microservices-net
+
+# Déclaration du réseau utilisé par tous les services
+networks:
+  microservices-net:
+    driver: bridge      # réseau privé standard de Docker
+
+# Déclaration des volumes nommés (gérés par Docker, persistants)
+volumes:
+  postgres-data:        # données PostgreSQL

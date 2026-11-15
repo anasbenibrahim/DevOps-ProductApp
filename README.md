@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 # DevOps-ProductApp
 
->>>>>>> origin/master
 # Product and Order Management Platform
 
 A beginner-friendly Java 17 / Spring Boot 3 Maven multi-module microservices example.

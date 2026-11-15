@@ -30,6 +30,18 @@
         <spring-cloud.version>2023.0.3</spring-cloud.version>
     </properties>
 
+    <dependencies>
+        <!-- Observabilite : health/liveness/readiness + metriques Prometheus pour tous les modules -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+    </dependencies>
+
     <dependencyManagement>
         <dependencies>
             <dependency>

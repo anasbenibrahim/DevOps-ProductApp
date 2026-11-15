@@ -1,0 +1,11 @@
+# Fichiers compilés en local (Docker recompile lui-même)
+**/target
+
+# Historique Git et fichiers de l'IDE : inutiles dans l'image
+.git
+.idea
+*.iml
+.vscode
+
+# Secrets locaux : ne jamais les envoyer dans le contexte de build
+.env
